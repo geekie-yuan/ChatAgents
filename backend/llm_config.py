@@ -33,9 +33,10 @@ class LLMConfig:
 
     # 支持的 OpenAI 模型
     OPENAI_MODELS = {
-        "gpt-4-turbo": "gpt-4-turbo-preview",
-        "gpt-4": "gpt-4",
-        "gpt-3.5-turbo": "gpt-3.5-turbo",
+        "gpt-5.1": "gpt-5.1",
+        "gpt-5-mini": "gpt-5-mini",
+        "gpt-5-nano": "gpt-5-nano",
+        "gpt-5": "gpt-5",
         "gpt-4.1-nano": "gpt-4.1-nano",
     }
 
@@ -84,9 +85,9 @@ class LLMConfig:
 
     @staticmethod
     def create_openai(
-        model: str = "gpt-4-turbo",
+        model: str = "gpt-5.1-mini",
         api_key: Optional[str] = None,
-        temperature: float = 0.7,
+        temperature: float = 1,
         max_tokens: int = 4096,
         streaming: bool = True,
     ) -> BaseChatModel:
@@ -103,7 +104,7 @@ class LLMConfig:
         Returns:
             OpenAI 语言模型实例
         """
-        model_name = LLMConfig.OPENAI_MODELS.get(model, LLMConfig.OPENAI_MODELS["gpt-4-turbo"])
+        model_name = LLMConfig.OPENAI_MODELS.get(model, LLMConfig.OPENAI_MODELS["gpt-5.1"])
 
         llm = ChatOpenAI(
             model=model_name,
@@ -159,7 +160,6 @@ class LLMConfig:
         provider: str = LLMProvider.CLAUDE,
         model: Optional[str] = None,
         api_key: Optional[str] = None,
-        temperature: float = 0.7,
         max_tokens: int = 4096,
         streaming: bool = True,
     ) -> BaseChatModel:
@@ -170,7 +170,6 @@ class LLMConfig:
             provider: LLM 提供商（claude/openai/groq）
             model: 模型名称（可选，使用默认值）
             api_key: API 密钥（可选，从环境变量读取）
-            temperature: 温度参数（0-1）
             max_tokens: 最大 token 数
             streaming: 是否启用流式输出
 
@@ -184,15 +183,13 @@ class LLMConfig:
             return LLMConfig.create_claude(
                 model=model or "sonnet",
                 api_key=api_key,
-                temperature=temperature,
                 max_tokens=max_tokens,
                 streaming=streaming,
             )
         elif provider == LLMProvider.OPENAI:
             return LLMConfig.create_openai(
-                model=model or "gpt-4-turbo",
+                model=model or "gpt-4o",
                 api_key=api_key,
-                temperature=temperature,
                 max_tokens=max_tokens,
                 streaming=streaming,
             )
@@ -200,10 +197,8 @@ class LLMConfig:
             return LLMConfig.create_groq(
                 model=model or "llama-3.3-70b",
                 api_key=api_key,
-                temperature=temperature,
                 max_tokens=max_tokens,
                 streaming=streaming,
-                
             )
         else:
             raise ValueError(f"不支持的 LLM 提供商: {provider}")

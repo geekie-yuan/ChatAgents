@@ -12,9 +12,34 @@ import uuid
 import os
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
+import re
 
 # 加载环境变量
 load_dotenv()
+
+
+# def fix_markdown_format(text: str) -> str:
+#     """
+#     修复 Markdown 格式问题，确保正确渲染
+
+#     主要修复：
+#     - 标题语法：确保 # 后有空格
+#     - 列表语法：确保 - 或 * 后有空格
+#     """
+#     if not text:
+#         return text
+
+#     # 修复标题：# 后没有空格的情况
+#     # 匹配行首的 1-6 个 # 后直接跟非空格字符
+#     text = re.sub(r'^(#{1,6})([^\s#])', r'\1 \2', text, flags=re.MULTILINE)
+
+#     # 修复无序列表：- 或 * 后没有空格
+#     text = re.sub(r'^(\s*[-*])([^\s])', r'\1 \2', text, flags=re.MULTILINE)
+
+#     # 修复有序列表：数字. 后没有空格
+#     text = re.sub(r'^(\s*\d+\.)([^\s])', r'\1 \2', text, flags=re.MULTILINE)
+
+#     return text
 
 # ==================== 页面配置 ====================
 st.set_page_config(
@@ -56,6 +81,35 @@ st.markdown("""
 
 # ==================== 工具函数 ====================
 
+def detect_api_key_type(api_key: str) -> str:
+    """
+    自动识别 API 密钥类型
+
+    Returns:
+        "claude" | "openai" | "unknown"
+    """
+    if not api_key:
+        return "unknown"
+
+    # Claude API 密钥格式: sk-ant-api03-...
+    if api_key.startswith("sk-ant-"):
+        return "claude"
+    # OpenAI API 密钥格式: sk-... (但不是 sk-ant-)
+    elif api_key.startswith("sk-"):
+        return "openai"
+
+    return "unknown"
+
+
+def get_default_model(provider: str) -> str:
+    """根据提供商获取默认模型"""
+    if provider == "claude":
+        return "sonnet"
+    elif provider == "openai":
+        return "gpt-5-mini"
+    return "sonnet"
+
+
 def initialize_session():
     """初始化会话状态"""
     if "messages" not in st.session_state:
@@ -70,9 +124,10 @@ def initialize_session():
     if "tool_calls" not in st.session_state:
         st.session_state.tool_calls = []
 
-    # API 密钥 - 从环境变量加载默认值
-    if "claude_api_key" not in st.session_state:
-        st.session_state.claude_api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    # API 密钥 - 统一为 llm_api_key，从环境变量加载
+    if "llm_api_key" not in st.session_state:
+        # 优先 ANTHROPIC_API_KEY，其次 OPENAI_API_KEY
+        st.session_state.llm_api_key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
 
     if "tavily_api_key" not in st.session_state:
         st.session_state.tavily_api_key = os.getenv("TAVILY_API_KEY", "")
@@ -81,11 +136,13 @@ def initialize_session():
     if "agent_type" not in st.session_state:
         st.session_state.agent_type = "fast"
 
+    # 根据密钥类型自动设置提供商
     if "llm_provider" not in st.session_state:
-        st.session_state.llm_provider = "claude"
+        detected_type = detect_api_key_type(st.session_state.llm_api_key)
+        st.session_state.llm_provider = detected_type if detected_type != "unknown" else "claude"
 
     if "llm_model" not in st.session_state:
-        st.session_state.llm_model = "sonnet"
+        st.session_state.llm_model = get_default_model(st.session_state.llm_provider)
 
 
 def format_time(timestamp: datetime.datetime) -> str:
@@ -121,8 +178,14 @@ def stream_agent_response(user_input: str, config: Dict) -> tuple:
     # 添加 API 密钥到请求头
     if config.get("tavily_api_key"):
         headers["X-Tavily-Key"] = config["tavily_api_key"]
-    if config.get("claude_api_key"):
-        headers["X-Claude-Key"] = config["claude_api_key"]
+
+    # 根据检测到的密钥类型传递到正确的请求头
+    llm_api_key = config.get("llm_api_key", "")
+    key_type = detect_api_key_type(llm_api_key)
+    if key_type == "claude":
+        headers["X-Claude-Key"] = llm_api_key
+    elif key_type == "openai":
+        headers["X-OpenAI-Key"] = llm_api_key
 
     # 准备请求体
     payload = {
@@ -243,15 +306,20 @@ def render_sidebar():
 
         # ===== API 密钥管理 =====
         with st.expander("🔑 API 密钥", expanded=True):
-            # Claude API 密钥
-            claude_key = st.text_input(
-                "Claude API 密钥",
+            # LLM API 密钥（自动识别 Claude 或 OpenAI）
+            llm_key = st.text_input(
+                "LLM API 密钥",
                 type="password",
-                value=st.session_state.claude_api_key,
-                help="输入您的 Anthropic API 密钥（sk-ant-api...）"
+                value=st.session_state.llm_api_key,
+                help="输入 Claude (sk-ant-...) 或 OpenAI (sk-...) API 密钥，系统自动识别"
             )
-            if claude_key != st.session_state.claude_api_key:
-                st.session_state.claude_api_key = claude_key
+            if llm_key != st.session_state.llm_api_key:
+                st.session_state.llm_api_key = llm_key
+                # 自动更新提供商和模型
+                new_type = detect_api_key_type(llm_key)
+                if new_type != "unknown":
+                    st.session_state.llm_provider = new_type
+                    st.session_state.llm_model = get_default_model(new_type)
 
             # Tavily API 密钥
             tavily_key = st.text_input(
@@ -266,10 +334,13 @@ def render_sidebar():
             # 密钥状态指示
             col1, col2 = st.columns(2)
             with col1:
-                if st.session_state.claude_api_key:
+                key_type = detect_api_key_type(st.session_state.llm_api_key)
+                if key_type == "claude":
                     st.success("✅ Claude")
+                elif key_type == "openai":
+                    st.success("✅ OpenAI")
                 else:
-                    st.error("❌ Claude")
+                    st.error("❌ LLM 密钥")
             with col2:
                 if st.session_state.tavily_api_key:
                     st.success("✅ Tavily")
@@ -289,23 +360,53 @@ def render_sidebar():
             if agent_type != st.session_state.agent_type:
                 st.session_state.agent_type = agent_type
 
-            # LLM 提供商（当前仅支持 Claude）
-            st.session_state.llm_provider = "claude"
-            st.info("当前仅支持 Claude，未来将添加更多模型")
-
-            # Claude 模型选择
-            model_options = {
-                "haiku": "Haiku（快速且经济）",
-                "sonnet": "Sonnet（平衡性能）",
-                "opus": "Opus（最强性能）"
+            # LLM 提供商选择（根据密钥自动检测）
+            current_provider = st.session_state.llm_provider
+            provider_options = ["claude", "openai"]
+            provider_labels = {
+                "claude": "Claude",
+                "openai": "OpenAI"
             }
 
+            selected_provider = st.radio(
+                "LLM 提供商",
+                options=provider_options,
+                format_func=lambda x: provider_labels[x],
+                index=provider_options.index(current_provider) if current_provider in provider_options else 0,
+                help="根据 API 密钥自动检测，也可手动选择"
+            )
+            if selected_provider != st.session_state.llm_provider:
+                st.session_state.llm_provider = selected_provider
+                st.session_state.llm_model = get_default_model(selected_provider)
+
+            # 根据提供商显示对应的模型选择
+            if st.session_state.llm_provider == "claude":
+                model_options = {
+                    "haiku": "Haiku（快速且经济）",
+                    "sonnet": "Sonnet（平衡性能）",
+                    "opus": "Opus（最强性能）"
+                }
+                model_label = "Claude 模型"
+            else:  # openai
+                model_options = {
+                    "gpt-5-nano": "gpt-5-nano（快速）",
+                    "gpt-5-mini": "gpt-5-mini（平衡）",
+                    "gpt-5.1": "gpt-5.1（最强性能）"
+                }
+                model_label = "OpenAI 模型"
+
+            # 确保当前模型在选项中
+            current_model = st.session_state.llm_model
+            if current_model not in model_options:
+                current_model = list(model_options.keys())[0]
+                st.session_state.llm_model = current_model
+
             selected_model = st.selectbox(
-                "Claude 模型",
+                model_label,
                 options=list(model_options.keys()),
                 format_func=lambda x: model_options[x],
-                index=list(model_options.keys()).index(st.session_state.llm_model),
-                help="选择 Claude 模型版本"
+                index=list(model_options.keys()).index(current_model),
+                help=f"选择 {st.session_state.llm_provider.upper()} 模型版本"
             )
             if selected_model != st.session_state.llm_model:
                 st.session_state.llm_model = selected_model
@@ -352,7 +453,7 @@ def render_sidebar():
             - FastAPI (后端)
             - LangGraph (智能体框架)
             - Tavily (Web 工具)
-            - Claude (语言模型)
+            - Claude / OpenAI (语言模型)
 
             **作者**: Yuan
             **博客**: [blog.geekie.site](https://blog.geekie.site)
@@ -388,6 +489,7 @@ def main():
             if timestamp:
                 st.caption(f"🕒 {format_time(timestamp)}")
             st.markdown(content)
+            # st.markdown(fix_markdown_format(content))
 
             # 显示工具调用（如果有）
             if role == "assistant" and "tool_calls" in msg and msg["tool_calls"]:
@@ -432,7 +534,7 @@ def main():
                 # 准备配置
                 config = {
                     "tavily_api_key": st.session_state.tavily_api_key,
-                    "claude_api_key": st.session_state.claude_api_key,
+                    "llm_api_key": st.session_state.llm_api_key,
                     "thread_id": st.session_state.thread_id,
                     "agent_type": st.session_state.agent_type,
                     "llm_provider": st.session_state.llm_provider,
@@ -448,7 +550,8 @@ def main():
                         if content:
                             # 更新响应文本
                             full_response += content
-                            message_placeholder.markdown(full_response + "▌")
+                            #message_placeholder.markdown(fix_markdown_format(full_response) + "▌")
+                            message_placeholder.markdown(full_response)
 
                         if tool_event:
                             # 记录工具调用
@@ -459,6 +562,7 @@ def main():
                                 render_tool_call(tool_event)
 
                 # 显示最终响应
+                #message_placeholder.markdown(fix_markdown_format(full_response))
                 message_placeholder.markdown(full_response)
 
                 # 保存助手消息

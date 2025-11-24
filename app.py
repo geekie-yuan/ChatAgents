@@ -109,12 +109,8 @@ async def stream_agent(body: AgentRequest, request: Request):
     # 获取 Tavily API 密钥
     tavily_api_key = request.headers.get("X-Tavily-Key") or os.getenv("TAVILY_API_KEY")
 
-    # 获取 Claude API 密钥（如果使用 Claude）
-    claude_api_key = None
-    if body.llm_provider == LLMProvider.CLAUDE:
-        claude_api_key = request.headers.get("X-Claude-Key") or os.getenv("ANTHROPIC_API_KEY")
-
-    # 获取其他 LLM API 密钥
+    # 获取 LLM API 密钥
+    claude_api_key = request.headers.get("X-Claude-Key") or os.getenv("ANTHROPIC_API_KEY")
     openai_api_key = request.headers.get("X-OpenAI-Key") or os.getenv("OPENAI_API_KEY")
     groq_api_key = request.headers.get("X-Groq-Key") or os.getenv("GROQ_API_KEY")
 
@@ -142,7 +138,7 @@ async def stream_agent(body: AgentRequest, request: Request):
             main_llm = LLMConfig.create_openai(
                 model=body.llm_model,
                 api_key=openai_api_key,
-                temperature=0.7,
+                temperature=1,
                 max_tokens=4096,
                 streaming=True
             )
