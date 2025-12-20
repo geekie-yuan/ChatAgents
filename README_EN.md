@@ -1,4 +1,4 @@
-# 🤖 Yuan's ChatBot 2.0
+# 🤖 Yuan's ChatAgents
 
 <div align="center">
 
@@ -46,43 +46,8 @@ Through a hybrid architecture (Streamlit frontend + FastAPI backend), it provide
 
 ## 🏗️ Architecture Design
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Streamlit Frontend                        │
-│  (streamlit_app.py)                                          │
-│  - User Interface                                            │
-│  - API Key Management                                        │
-│  - Streaming Response Display                                │
-│  - Tool Call Visualization                                   │
-└────────────────────┬────────────────────────────────────────┘
-                     │ HTTP/JSON Stream
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│                     FastAPI Backend                          │
-│  (app.py)                                                    │
-│  - /stream_agent Endpoint                                    │
-│  - LLM Configuration Management                              │
-│  - Streaming Event Generation                                │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    LangGraph Agent                           │
-│  (backend/agent.py)                                          │
-│  - ReAct Agent                                               │
-│  - Tool Call Orchestration                                   │
-│  - Conversation Memory Management                            │
-└──────┬───────────────────────┬──────────────────────────────┘
-       │                       │
-       ↓                       ↓
-┌──────────────┐      ┌────────────────────┐
-│  Claude LLM  │      │   Tavily Tools     │
-│              │      │  - Search          │
-│ - Haiku      │      │  - Extract         │
-│ - Sonnet     │      │  - Crawl           │
-│ - Opus       │      │                    │
-└──────────────┘      └────────────────────┘
-```
+![Untitled-2025-12-21-00381](https://img.geekie.site/i/adImg/2025/12/21/023202.png)
+
 
 ### Tech Stack
 
@@ -91,7 +56,7 @@ Through a hybrid architecture (Streamlit frontend + FastAPI backend), it provide
 | **Frontend** | Streamlit | Simple Python web framework |
 | **Backend** | FastAPI | High-performance async API framework |
 | **Agent** | LangGraph | Agent orchestration framework |
-| **LLM** | Claude (Anthropic) | Primary language model |
+| **LLM** | Claude OpenAI | Primary language model |
 | **Tools** | Tavily | Web search/extract/crawl |
 | **Others** | Docker, python-dotenv | Containerization and configuration management |
 
@@ -230,9 +195,9 @@ Each tool call is displayed in real-time in the UI:
 |--------|------|------|--------|
 | `ANTHROPIC_API_KEY` | Claude API key | ✅ | - |
 | `TAVILY_API_KEY` | Tavily API key | ✅ | - |
-| `OPENAI_API_KEY` | OpenAI API key (future) | ❌ | - |
+| `OPENAI_API_KEY` | OpenAI API key | ✅ | - |
 | `GROQ_API_KEY` | Groq API key (future) | ❌ | - |
-| `PORT` | Backend port | ❌ | 8080 |
+| `PORT` | Backend port | ✅ | 8080 |
 
 ### Agent Configuration
 
@@ -258,17 +223,30 @@ intelligent-chatbot/
 ├── backend/                    # Backend module
 │   ├── __init__.py
 │   ├── agent.py               # Web agent (LangGraph)
+│   ├── llm_config.py          # LLM configuration management
 │   ├── prompts.py             # Prompt templates
-│   ├── utils.py               # Utility functions
-│   └── llm_config.py          # LLM configuration management
-├── app.py                     # FastAPI backend server
-├── streamlit_app.py           # Streamlit frontend application
-├── requirements.txt           # Python dependencies
-├── .env.sample                # Environment variable example
-├── .gitignore                 # Git ignore file
-├── Dockerfile                 # Docker image
-├── docker-compose.yml         # Docker Compose configuration
-└── README.md                  # Project documentation
+│   ├── session_manager.py     # Session manager
+│   └── utils.py               # Utility functions
+├── data/                       # Data directory
+│   └── sessions/              # Session data storage
+├── docs/                       # Documentation directory
+│   └── TAVILY_PARAMETERS.md   # Tavily parameters documentation
+├── .streamlit/                 # Streamlit configuration
+├── app.py                      # FastAPI backend server
+├── streamlit_app.py            # Streamlit frontend application
+├── requirements.txt            # Python dependencies
+├── .env                        # Environment variables (local)
+├── .env.sample                 # Environment variable example
+├── .gitignore                  # Git ignore file
+├── Dockerfile                  # Docker image
+├── docker-compose.yml          # Docker Compose configuration
+├── favicon.ico                 # Website icon
+├── setup.bat                   # Windows setup script
+├── start.bat                   # Windows startup script
+├── PROJECT_SUMMARY.md          # Project summary
+├── QUICK_START.md              # Quick start guide
+├── README.md                   # Project documentation (Chinese)
+└── README_EN.md                # Project documentation (English)
 ```
 
 ## 🎯 Feature Demonstrations
@@ -392,14 +370,6 @@ This project is built on the following open-source projects:
 - [LangGraph](https://langchain-ai.github.io/langgraph/) - Agent orchestration framework
 - [Anthropic Claude](https://www.anthropic.com/) - Powerful language model
 - [Tavily](https://tavily.com/) - AI-optimized search API
-
-## 📊 Project Statistics
-
-- **Lines of Code**: ~1500+ lines
-- **File Count**: 15+
-- **Dependency Count**: 20+
-- **Supported LLMs**: Claude (Haiku/Sonnet/Opus)
-- **Supported Tools**: 3 (Search/Extract/Crawl)
 
 ---
 

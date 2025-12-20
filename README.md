@@ -36,51 +36,15 @@
 
 ### 🛠️ 高级特性
 - **🔑 灵活的 API 密钥管理**：支持 Claude、Tavily 等多个 API
-- **🎨 多模型支持**：支持 Claude Haiku/Sonnet/Opus，预留 OpenAI/Groq 接口
-- **📊 工具调用可视化**：实时展示搜索/提取/爬取过程
-- **🎯 智能体类型切换**：快速模式 vs 深度思考模式
+- **🎨 多模型支持**：支持 Claude (Haiku/Sonnet/Opus)、OpenAI(mini/nano/5.1)，预留 I/Groq 接口
+- **📊 工具调用可视化**：实时展示Serch/Extract/Crawl过程
+- **🎯 智能体类型切换**：快速模式 与 深度思考模式
 - **💾 会话管理**：支持多会话，保留对话历史
 - **🐳 Docker 支持**：一键容器化部署
 
 ## 🏗️ 架构设计
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Streamlit Frontend                        │
-│  (streamlit_app.py)                                          │
-│  - 用户界面                                                  │
-│  - API 密钥管理                                              │
-│  - 流式响应展示                                              │
-│  - 工具调用可视化                                            │
-└────────────────────┬────────────────────────────────────────┘
-                     │ HTTP/JSON Stream
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│                     FastAPI Backend                          │
-│  (app.py)                                                    │
-│  - /stream_agent 端点                                        │
-│  - LLM 配置管理                                              │
-│  - 流式事件生成                                              │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    LangGraph Agent                           │
-│  (backend/agent.py)                                          │
-│  - ReAct 智能体                                              │
-│  - 工具调用编排                                              │
-│  - 对话记忆管理                                              │
-└──────┬───────────────────────┬──────────────────────────────┘
-       │                       │
-       ↓                       ↓
-┌──────────────┐      ┌────────────────────┐
-│  Claude LLM  │      │   Tavily Tools     │
-│              │      │  - Search          │
-│ - Haiku      │      │  - Extract         │
-│ - Sonnet     │      │  - Crawl           │
-│ - Opus       │      │                    │
-└──────────────┘      └────────────────────┘
-```
+![Untitled-2025-12-21-0038](https://img.geekie.site/i/adImg/2025/12/21/022423.png)
 
 ### 技术栈
 
@@ -89,7 +53,7 @@
 | **前端** | Streamlit | 简洁的 Python Web 框架 |
 | **后端** | FastAPI | 高性能异步 API 框架 |
 | **智能体** | LangGraph | 智能体编排框架 |
-| **LLM** | Claude (Anthropic) | 主要语言模型 |
+| **LLM** | Claude OpenAI | 主要语言模型 |
 | **工具** | Tavily | Web 搜索/提取/爬取 |
 | **其他** | Docker, python-dotenv | 容器化与配置管理 |
 
@@ -228,9 +192,9 @@ docker-compose up --build
 |--------|------|------|--------|
 | `ANTHROPIC_API_KEY` | Claude API 密钥 | ✅ | - |
 | `TAVILY_API_KEY` | Tavily API 密钥 | ✅ | - |
-| `OPENAI_API_KEY` | OpenAI API 密钥（未来） | ❌ | - |
+| `OPENAI_API_KEY` | OpenAI API 密钥 | ✅ | - |
 | `GROQ_API_KEY` | Groq API 密钥（未来） | ❌ | - |
-| `PORT` | 后端端口 | ❌ | 8080 |
+| `PORT` | 后端端口 | ✅ | 8080 |
 
 ### 智能体配置
 
@@ -256,17 +220,28 @@ intelligent-chatbot/
 ├── backend/                    # 后端模块
 │   ├── __init__.py
 │   ├── agent.py               # Web 智能体（LangGraph）
+│   ├── llm_config.py          # LLM 配置管理
 │   ├── prompts.py             # 提示词模板
-│   ├── utils.py               # 工具函数
-│   └── llm_config.py          # LLM 配置管理
-├── app.py                     # FastAPI 后端服务器
-├── streamlit_app.py           # Streamlit 前端应用
-├── requirements.txt           # Python 依赖
-├── .env.sample                # 环境变量示例
-├── .gitignore                 # Git 忽略文件
-├── Dockerfile                 # Docker 镜像
-├── docker-compose.yml         # Docker Compose 配置
-└── README.md                  # 项目文档
+│   ├── session_manager.py     # 会话管理器
+│   └── utils.py               # 工具函数
+├── data/                       # 数据目录
+│   └── sessions/              # 会话数据存储
+├── docs/                       # 文档目录
+│   └── TAVILY_PARAMETERS.md   # Tavily 参数说明
+├── .streamlit/                 # Streamlit 配置
+├── app.py                      # FastAPI 后端服务器
+├── streamlit_app.py            # Streamlit 前端应用
+├── requirements.txt            # Python 依赖
+├── .env                        # 环境变量（本地）
+├── .env.sample                 # 环境变量示例
+├── .gitignore                  # Git 忽略文件
+├── Dockerfile                  # Docker 镜像
+├── docker-compose.yml          # Docker Compose 配置
+├── favicon.ico                 # 网站图标
+├── PROJECT_SUMMARY.md          # 项目概述
+├── QUICK_START.md              # 快速开始指南
+├── README.md                   # 项目文档（中文）
+└── README_EN.md                # 项目文档（英文）
 ```
 
 ## 🎯 功能演示
@@ -347,14 +322,10 @@ python app.py
 
 ## 🔮 未来计划
 
-- [ ] 支持更多 LLM 提供商（OpenAI, Groq, etc.）
+- [ ] 支持更多 LLM 提供商（Groq, etc.）
 - [ ] 添加文件上传和分析功能
 - [ ] 实现对话导出（Markdown/PDF）
-- [ ] 添加语音输入/输出
-- [ ] 支持多语言界面
 - [ ] 优化流式响应性能
-- [ ] 添加对话评分和反馈
-- [ ] 集成更多工具（计算器、代码执行器等）
 
 ## 🤝 贡献
 
@@ -391,13 +362,7 @@ python app.py
 - [Anthropic Claude](https://www.anthropic.com/) - 强大的语言模型
 - [Tavily](https://tavily.com/) - AI 优化的搜索 API
 
-## 📊 项目统计
 
-- **代码行数**: ~1500+ 行
-- **文件数量**: 15+
-- **依赖包数**: 20+
-- **支持的 LLM**: Claude (Haiku/Sonnet/Opus)
-- **支持的工具**: 3 (Search/Extract/Crawl)
 
 ---
 
