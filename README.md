@@ -1,5 +1,6 @@
 # 🤖 Yuan's  ChatAgents
 <div align="center">
+
 **一个集成了 Web 搜索、内容提取和深度思考能力的智能体助手**
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
@@ -173,7 +174,20 @@ docker-compose up --build
 
 2. **选择智能体模式**
    - **⚡ 快速模式**: 适合简单问题，快速响应
+     - 使用 `basic` 搜索深度，速度快、成本低
+     - 返回 3 条搜索结果（平衡配置）
+     - 爬取限制：5 个页面
+     - 不包含图片（减少响应体积）
+     - TavilySearch 和 TavilyExtract 均使用基础级别
    - **🧠 深度思考模式**: 适合复杂查询，深度研究
+     - 使用 `advanced` 搜索深度，结果更全面但成本更高
+     - 返回 5 条搜索结果
+     - 爬取限制：15 个页面
+     - 包含图片（支持视觉内容）
+     - TavilySearch 和 TavilyExtract 均使用高级级别
+   - **🎯 高级参数支持**:
+     - `topic`: 搜索主题分类（general/news/finance）
+     - `time_range`: 时间范围过滤（day/week/month/year）
 
 3. **选择 Claude 模型**
    - **Haiku**: 快速且经济

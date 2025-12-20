@@ -124,6 +124,19 @@ def initialize_session():
     if "tool_calls" not in st.session_state:
         st.session_state.tool_calls = []
 
+    # 会话管理相关状态
+    if "current_session_id" not in st.session_state:
+        st.session_state.current_session_id = None
+
+    if "sessions_list" not in st.session_state:
+        st.session_state.sessions_list = []
+
+    if "show_rename_dialog" not in st.session_state:
+        st.session_state.show_rename_dialog = False
+
+    if "rename_session_id" not in st.session_state:
+        st.session_state.rename_session_id = None
+
     # API 密钥 - 统一为 llm_api_key，从环境变量加载
     if "llm_api_key" not in st.session_state:
         # 优先 ANTHROPIC_API_KEY，其次 OPENAI_API_KEY
@@ -157,6 +170,125 @@ def check_backend_health() -> bool:
         return response.status_code == 200
     except:
         return False
+
+
+# ==================== 会话管理功能 ====================
+
+def load_sessions_list():
+    """从后端加载会话列表"""
+    try:
+        response = requests.get(f"{BACKEND_URL}/api/sessions", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            st.session_state.sessions_list = data.get("sessions", [])
+        else:
+            st.error(f"加载会话列表失败: {response.status_code}")
+    except Exception as e:
+        st.error(f"加载会话列表失败: {e}")
+
+
+def load_session(session_id: str):
+    """加载指定会话的详细信息"""
+    try:
+        response = requests.get(f"{BACKEND_URL}/api/sessions/{session_id}", timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 404:
+            st.error("会话不存在")
+            return None
+        else:
+            st.error(f"加载会话失败: {response.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"加载会话失败: {e}")
+        return None
+
+
+def switch_session(session_id: str):
+    """切换到指定会话"""
+    session_data = load_session(session_id)
+
+    if session_data:
+        # 更新当前会话ID和thread_id
+        st.session_state.current_session_id = session_id
+        st.session_state.thread_id = session_id
+
+        # 加载历史消息
+        st.session_state.messages = session_data.get("messages", [])
+
+        # 转换时间戳格式
+        for msg in st.session_state.messages:
+            if "timestamp" in msg and isinstance(msg["timestamp"], str):
+                msg["timestamp"] = datetime.datetime.fromisoformat(msg["timestamp"])
+
+        st.rerun()
+
+
+def create_new_session():
+    """创建新会话"""
+    # 生成新的会话ID
+    new_session_id = str(uuid.uuid4())
+
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/sessions",
+            json={"session_id": new_session_id, "title": new_session_id},  # 使用 session_id 作为默认标题
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            # 切换到新会话
+            st.session_state.current_session_id = new_session_id
+            st.session_state.thread_id = new_session_id
+            st.session_state.messages = []
+
+            # 重新加载会话列表
+            load_sessions_list()
+            st.rerun()
+        else:
+            st.error(f"创建会话失败: {response.status_code}")
+    except Exception as e:
+        st.error(f"创建会话失败: {e}")
+
+
+def delete_session_ui(session_id: str):
+    """删除会话"""
+    try:
+        response = requests.delete(f"{BACKEND_URL}/api/sessions/{session_id}", timeout=5)
+
+        if response.status_code == 200:
+            # 如果删除的是当前会话，清空消息
+            if st.session_state.current_session_id == session_id:
+                st.session_state.current_session_id = None
+                st.session_state.messages = []
+                st.session_state.thread_id = str(uuid.uuid4())
+
+            # 重新加载会话列表
+            load_sessions_list()
+            st.rerun()
+        else:
+            st.error(f"删除会话失败: {response.status_code}")
+    except Exception as e:
+        st.error(f"删除会话失败: {e}")
+
+
+def rename_session_ui(session_id: str, new_title: str):
+    """重命名会话"""
+    try:
+        response = requests.put(
+            f"{BACKEND_URL}/api/sessions/{session_id}",
+            json={"title": new_title},
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            # 重新加载会话列表
+            load_sessions_list()
+            # 不在这里调用 st.rerun()，让调用者控制
+        else:
+            st.error(f"重命名会话失败: {response.status_code}")
+    except Exception as e:
+        st.error(f"重命名会话失败: {e}")
 
 
 def stream_agent_response(user_input: str, config: Dict) -> tuple:
@@ -262,6 +394,17 @@ def render_tool_call(tool_event: Dict):
     """渲染工具调用卡片"""
     tool_type = tool_event.get("tool_type", "search")
     tool_name = tool_event.get("tool_name", "未知工具")
+    operation_index = tool_event.get("operation_index", 0)
+
+    # 工具友好名称映射
+    tool_name_map = {
+        "TavilySearch": "Tavily 搜索",
+        "TavilyExtract": "Tavily 内容提取",
+        "TavilyCrawl": "Tavily 网站爬取",
+        "tavily_search_results_json": "Tavily 搜索",
+        "tavily_extract": "Tavily 内容提取",
+        "tavily_crawl": "Tavily 网站爬取"
+    }
 
     # 工具图标和颜色
     tool_icons = {
@@ -276,25 +419,91 @@ def render_tool_call(tool_event: Dict):
         "crawl": "#FF9800"
     }
 
+    # 工具描述
+    tool_descriptions = {
+        "search": "在互联网上搜索相关信息",
+        "extract": "从指定网页提取详细内容",
+        "crawl": "深度爬取网站结构和内容"
+    }
+
     icon = tool_icons.get(tool_type, "🔧")
     color = tool_colors.get(tool_type, "#757575")
+    friendly_name = tool_name_map.get(tool_name, tool_name)
+    description = tool_descriptions.get(tool_type, "执行工具操作")
 
     if tool_event["type"] == "start":
-        with st.status(f"{icon} 正在使用 {tool_name}...", expanded=False):
-            st.write(f"**输入**: {tool_event.get('content', 'N/A')}")
-    elif tool_event["type"] == "end":
-        with st.expander(f"{icon} {tool_name} 完成", expanded=False):
+        # 工具开始调用
+        with st.expander(f"{icon} 正在执行: {friendly_name} - 操作 #{operation_index + 1}", expanded=False):
+            st.markdown(f"**🎯 任务**: {description}")
+            st.markdown(f"**⏳ 状态**: 运行中...")
+
+            # 显示输入参数
             content = tool_event.get('content', {})
+            if content and content != 'N/A':
+                st.markdown("**📥 输入参数**:")
+                if isinstance(content, dict):
+                    for key, value in content.items():
+                        st.write(f"- **{key}**: {value}")
+                else:
+                    st.write(f"```\n{content}\n```")
+
+    elif tool_event["type"] == "end":
+        # 工具调用完成
+        with st.expander(f"{icon} {friendly_name} - 操作 #{operation_index + 1} 已完成", expanded=False):
+            st.markdown(f"**🎯 任务**: {description}")
+
+            content = tool_event.get('content', {})
+
+            # 尝试解析 JSON 字符串
+            if isinstance(content, str):
+                try:
+                    import json
+                    content = json.loads(content)
+                except:
+                    pass
+
             if isinstance(content, dict):
+                # 显示摘要
                 if 'summary' in content:
-                    st.write("**摘要**:")
-                    st.write(content['summary'][:500] + "..." if len(content.get('summary', '')) > 500 else content.get('summary', ''))
+                    st.markdown("**📝 内容摘要**:")
+                    summary_text = content.get('summary', '')
+                    if len(summary_text) > 800:
+                        st.write(summary_text[:800] + "...")
+                        with st.expander("查看完整摘要"):
+                            st.write(summary_text)
+                    else:
+                        st.write(summary_text)
+
+                # 显示来源链接
                 if 'urls' in content and content['urls']:
-                    st.write("**来源链接**:")
-                    for url in content['urls'][:5]:  # 最多显示5个链接
-                        st.write(f"- {url}")
+                    st.markdown("**🔗 来源链接**:")
+                    for idx, url in enumerate(content['urls'][:10], 1):  # 最多显示10个链接
+                        st.markdown(f"{idx}. [{url}]({url})")
+
+                # 显示原始数据（如果有其他字段）
+                other_fields = {k: v for k, v in content.items() if k not in ['summary', 'urls', 'favicons']}
+                if other_fields:
+                    with st.expander("📊 查看原始数据"):
+                        st.json(other_fields)
+
+            elif isinstance(content, list):
+                st.markdown("**📊 结果列表**:")
+                for idx, item in enumerate(content[:5], 1):
+                    st.write(f"{idx}. {item}")
+                if len(content) > 5:
+                    with st.expander(f"查看全部 {len(content)} 条结果"):
+                        for idx, item in enumerate(content, 1):
+                            st.write(f"{idx}. {item}")
+
             else:
-                st.write(str(content)[:500] + "..." if len(str(content)) > 500 else str(content))
+                st.markdown("**📤 输出结果**:")
+                result_str = str(content)
+                if len(result_str) > 500:
+                    st.write(result_str[:500] + "...")
+                    with st.expander("查看完整输出"):
+                        st.write(result_str)
+                else:
+                    st.write(result_str)
 
 
 # ==================== 侧边栏配置 ====================
@@ -422,16 +631,109 @@ def render_sidebar():
             st.error("❌ 后端服务未运行")
             st.info("请确保后端服务已启动：\n```bash\npython app.py\n```")
 
-        # ===== 会话管理 =====
+        # ===== 会话历史 =====
         st.divider()
-        st.subheader("💬 会话管理")
-        st.caption(f"会话 ID: {st.session_state.thread_id[:8]}...")
+        with st.expander("📝 会话历史", expanded=False):
+            # 新建会话按钮
+            if st.button("➕ 新建会话", use_container_width=True, key="new_session_btn"):
+                create_new_session()
 
-        if st.button("🔄 新建会话", use_container_width=True):
-            st.session_state.messages = []
-            st.session_state.thread_id = str(uuid.uuid4())
-            st.session_state.tool_calls = []
-            st.rerun()
+            # 加载会话列表（首次加载）
+            if not st.session_state.sessions_list:
+                load_sessions_list()
+
+            # 显示会话列表
+            if st.session_state.sessions_list:
+                st.markdown("**历史会话**")
+                for session in st.session_state.sessions_list:
+                    session_id = session["session_id"]
+                    title = session["title"]
+                    updated_at = session.get("updated_at", "")
+
+                    # 格式化时间显示
+                    if updated_at:
+                        try:
+                            dt = datetime.datetime.fromisoformat(updated_at)
+                            time_str = dt.strftime("%m-%d %H:%M")
+                        except:
+                            time_str = ""
+                    else:
+                        time_str = ""
+
+                    # 判断是否为当前会话
+                    is_current = st.session_state.current_session_id == session_id
+
+                    # 会话卡片容器
+                    with st.container():
+                        # 检查是否正在重命名此会话
+                        is_renaming = (st.session_state.show_rename_dialog and
+                                      st.session_state.rename_session_id == session_id)
+
+                        if is_renaming:
+                            # 重命名模式：显示输入框
+                            col1, col2 = st.columns([8, 2])
+
+                            with col1:
+                                new_title = st.text_input(
+                                    "新标题",
+                                    value=title,
+                                    key=f"rename_input_{session_id}",
+                                    label_visibility="collapsed",
+                                    placeholder="输入新标题..."
+                                )
+
+                            with col2:
+                                # 确认和取消按钮
+                                col_ok, col_cancel = st.columns(2)
+                                with col_ok:
+                                    if st.button("✓", key=f"confirm_{session_id}", help="确认", use_container_width=True):
+                                        if new_title and new_title.strip():
+                                            rename_session_ui(session_id, new_title.strip())
+                                        st.session_state.show_rename_dialog = False
+                                        st.session_state.rename_session_id = None
+                                        st.rerun()
+                                with col_cancel:
+                                    if st.button("✗", key=f"cancel_{session_id}", help="取消", use_container_width=True):
+                                        st.session_state.show_rename_dialog = False
+                                        st.session_state.rename_session_id = None
+                                        st.rerun()
+                        else:
+                            # 正常显示模式
+                            col1, col2, col3 = st.columns([1.8, 1, 1])
+
+                            with col1:
+                                # 会话标题按钮
+                                button_label = f"{'' if is_current else ''}{title[:3]}{'...' if len(title) > 3 else ''}"
+                                if st.button(
+                                    button_label,
+                                    key=f"session_{session_id}",
+                                    help=f"{title}\n更新时间: {time_str}",
+                                    use_container_width=True,
+                                    type="primary" if is_current else "secondary"
+                                ):
+                                    if not is_current:
+                                        switch_session(session_id)
+
+                            with col2:
+                                # 重命名按钮
+                                if st.button("✏️", key=f"rename_{session_id}", help="重命名", use_container_width=True):
+                                    st.session_state.show_rename_dialog = True
+                                    st.session_state.rename_session_id = session_id
+                                    st.rerun()
+
+                            with col3:
+                                # 删除按钮
+                                if st.button("🗑️", key=f"delete_{session_id}", help="删除", use_container_width=True):
+                                    delete_session_ui(session_id)
+
+                        # 第二行：显示时间（仅在非重命名模式下显示）
+                        if not is_renaming and time_str:
+                            st.caption(f"🕒 {time_str}")
+
+                        st.markdown("---")  # 使用markdown分隔线，更轻量
+
+            else:
+                st.info("暂无会话历史")
 
         # ===== 关于 =====
         st.divider()

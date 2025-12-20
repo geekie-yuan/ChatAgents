@@ -41,11 +41,11 @@ class LLMConfig:
     }
 
     # 支持的 Groq 模型
-    GROQ_MODELS = {
-        "llama-3.3-70b": "llama-3.3-70b-versatile",
-        "mixtral-8x7b": "mixtral-8x7b-32768",
-        "kimi-k2": "moonshotai/kimi-k2-instruct",
-    }
+    # GROQ_MODELS = {
+    #     "llama-3.3-70b": "llama-3.3-70b-versatile",
+    #     "mixtral-8x7b": "mixtral-8x7b-32768",
+    #     "kimi-k2": "moonshotai/kimi-k2-instruct",
+    # }
 
     @staticmethod
     def create_claude(

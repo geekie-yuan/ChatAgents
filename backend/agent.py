@@ -93,7 +93,7 @@ def create_output_summarizer(summary_llm: BaseChatModel) -> Callable[[str, str],
 
 class WebAgent:
     """
-    Web 智能体类，集成 Tavily 搜索、提取和爬取功能
+    Web智能体 类，集成 Tavily 搜索、提取和爬取功能
     """
 
     def __init__(self, checkpointer: MemorySaver = None):
@@ -111,7 +111,10 @@ class WebAgent:
         llm: BaseChatModel,
         prompt: str,
         summary_llm: BaseChatModel,
-        user_message: str = ""
+        user_message: str = "",
+        mode: str = "fast",
+        topic: str = "general",
+        time_range: str = None
     ):
         """
         构建并编译 LangGraph 工作流
@@ -122,6 +125,9 @@ class WebAgent:
             prompt: 系统提示词
             summary_llm: 用于摘要的语言模型
             user_message: 用户原始消息（用于摘要上下文）
+            mode: 搜索模式，"fast"（快速模式）或 "deep"（深度思考模式），默认为 "fast"
+            topic: 搜索主题，"general"（通用）、"news"（新闻）或 "finance"（财经），默认为 "general"
+            time_range: 时间范围过滤，可选 "day"、"week"、"month"、"year"，默认不限制
 
         Returns:
             编译后的 LangGraph 智能体
@@ -129,25 +135,43 @@ class WebAgent:
         if not api_key:
             raise ValueError("错误：未提供 Tavily API 密钥")
 
+        # 根据模式设置搜索参数
+        # fast: 快速模式，使用 basic 深度，3 条结果，速度快、成本低
+        # deep: 深度思考模式，使用 advanced 深度，5 条结果，包含图片，结果更全面但成本更高
+        depth = "basic" if mode == "fast" else "advanced"
+        max_results = 3 if mode == "fast" else 5
+        include_images = False if mode == "fast" else True
+        crawl_limit = 5 if mode == "fast" else 15
+
+        # 构建 TavilySearch 参数
+        search_params = {
+            "max_results": max_results,
+            "tavily_api_key": api_key,
+            "include_favicon": True,
+            "search_depth": depth,
+            "include_answer": False,
+            "topic": topic,
+            "include_images": include_images,
+        }
+
+        # 添加时间范围参数（如果指定）
+        if time_range:
+            search_params["time_range"] = time_range
+
         # 创建 Tavily 工具
-        search = TavilySearch(
-            max_results=10,
-            tavily_api_key=api_key,
-            include_favicon=True,
-            search_depth="advanced",
-            include_answer=False,
-        )
+        search = TavilySearch(**search_params)
 
         extract = TavilyExtract(
-            extract_depth="advanced",
+            extract_depth=depth,
             tavily_api_key=api_key,
             include_favicon=True,
+            include_images=include_images,
         )
 
         crawl = TavilyCrawl(
             tavily_api_key=api_key,
             include_favicon=True,
-            limit=15
+            limit=crawl_limit
         )
 
         # 创建输出摘要器

@@ -1,6 +1,7 @@
 # 🤖 Yuan's ChatBot 2.0
 
 <div align="center">
+
 **An intelligent agent assistant integrated with Web search, content extraction, and deep thinking capabilities**
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)
@@ -175,7 +176,20 @@ docker-compose up --build
 
 2. **Select Agent Mode**
    - **⚡ Fast Mode**: For simple questions, quick response
+     - Uses `basic` search depth, faster and more cost-effective
+     - Returns 3 search results (balanced configuration)
+     - Crawl limit: 5 pages
+     - No images (reduces response size)
+     - Both TavilySearch and TavilyExtract use basic level
    - **🧠 Deep Thinking Mode**: For complex queries, in-depth research
+     - Uses `advanced` search depth, more comprehensive but higher cost
+     - Returns 5 search results
+     - Crawl limit: 15 pages
+     - Includes images (supports visual content)
+     - Both TavilySearch and TavilyExtract use advanced level
+   - **🎯 Advanced Parameters Support**:
+     - `topic`: Search topic classification (general/news/finance)
+     - `time_range`: Time range filtering (day/week/month/year)
 
 3. **Choose Claude Model**
    - **Haiku**: Fast and economical
