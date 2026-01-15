@@ -1,12 +1,13 @@
 version: '3.8'
 
 services:
-  # 后端服务
   backend:
     build: .
-    container_name: intelligent-chatbot-backend
+    container_name: chatbot-backend
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - ./data:/app/data
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - TAVILY_API_KEY=${TAVILY_API_KEY}
@@ -19,21 +20,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 40s
     restart: unless-stopped
+    networks:
+      - chatbot-network
 
-  # 前端服务
   frontend:
     build: .
-    container_name: intelligent-chatbot-frontend
+    container_name: chatbot-frontend
     ports:
-      - "8501:8501"
+      - "${FRONTEND_PORT:-8501}:8501"
+    volumes:
+      - ./data:/app/data
     environment:
       - BACKEND_URL=http://backend:8080
     command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - chatbot-network
 
 networks:
-  default:
-    name: intelligent-chatbot-network
+  chatbot-network:
+    driver: bridge

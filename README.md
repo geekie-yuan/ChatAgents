@@ -119,7 +119,7 @@ streamlit run streamlit_app.py
 **方法 B：使用 Docker Compose**
 
 ```bash
-docker-compose up --build
+docker-compose up -d --build
 ```
 
 #### 6. 访问应用
@@ -127,6 +127,62 @@ docker-compose up --build
 - **前端**: http://localhost:8501
 - **后端 API**: http://localhost:8080
 - **API 文档**: http://localhost:8080/docs
+
+### 🚢 生产环境部署（Docker + Nginx）
+
+**适用场景**：通过域名访问，支持 HTTPS
+
+1. **启动 Docker 容器**
+
+```bash
+# 克隆代码到服务器
+git clone <your-repo-url> /path/to/chatbot
+cd /path/to/chatbot
+
+# 配置环境变量
+cp .env.sample .env
+vim .env  # 填入 API 密钥
+
+# 可选：修改端口（默认 8080/8501）
+# 在 .env 中添加：
+# BACKEND_PORT=9080
+# FRONTEND_PORT=9501
+
+# 启动容器
+docker-compose up -d --build
+
+# 检查状态
+docker ps | grep chatbot
+docker logs chatbot-backend --tail 50
+```
+
+2. **配置 Nginx 反向代理**
+
+```bash
+# 复制 Nginx 配置模板
+sudo cp docs/nginx.conf.example /etc/nginx/sites-available/chatbot.conf
+
+# 或宝塔面板用户
+sudo cp docs/nginx.conf.example /www/server/panel/vhost/nginx/your-domain.conf
+
+# 编辑配置：修改域名、SSL 证书路径、端口号
+sudo vim /etc/nginx/sites-available/chatbot.conf
+
+# 启用配置（非宝塔用户）
+sudo ln -s /etc/nginx/sites-available/chatbot.conf /etc/nginx/sites-enabled/
+
+# 测试并重载
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+3. **验证部署**
+
+```bash
+curl https://your-domain.com/health
+# 应返回：{"status":"healthy"}
+```
+
+**端口配置**：通过 `.env` 文件设置 `BACKEND_PORT` 和 `FRONTEND_PORT`，默认 8080/8501
 
 ## 📖 使用指南
 
@@ -275,11 +331,110 @@ intelligent-chatbot/
 4. 📄 提取对比信息
 5. 🧠 深度分析并生成详细报告
 
-## 🐛 常见问题
+## 🐛 常见问题与故障排查
 
-### 1. 后端服务无法启动
+### Docker 部署问题
 
-**问题**: `ConnectionRefusedError` 或后端状态显示"未运行"
+#### 1. 前端显示"❌ 后端服务未运行"
+
+**现象**：页面显示后端未连接，无法使用聊天功能
+
+**原因分析**：
+1. `BACKEND_URL` 环境变量配置错误
+2. 前端容器无法访问后端容器
+3. 健康检查端点路径错误
+
+**解决方案**：
+
+```bash
+# 1. 检查容器状态
+docker ps | grep chatbot
+# 确认两个容器都在运行且 backend 状态为 healthy
+
+# 2. 检查环境变量
+docker exec chatbot-frontend env | grep BACKEND_URL
+# 应该输出：BACKEND_URL=http://backend:8080
+
+# 3. 测试容器间通信
+docker exec chatbot-frontend curl -s http://backend:8080/health
+# 应返回：{"message":"后端 API 正在运行","status":"healthy"}
+
+# 4. 如果失败，检查 docker-compose.yml
+# 确保：
+#   - BACKEND_URL=http://backend:8080（使用服务名，不是 localhost）
+#   - 两个服务在同一 network
+#   - backend 服务有 healthcheck 配置
+
+# 5. 重新部署
+docker-compose down
+docker-compose up -d --build
+```
+
+#### 2. Nginx 配置后出现 404 Not Found
+
+**现象**：访问 `https://your-domain.com/api/sessions` 返回 404
+
+**原因**：Nginx `proxy_pass` 配置错误，路径被截断
+
+**错误配置**：
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:9080/;  # ❌ 末尾的斜杠导致路径被截断
+}
+```
+
+**正确配置**：
+```nginx
+location /api/ {
+    proxy_pass http://127.0.0.1:9080;  # ✓ 末尾无斜杠，保留完整路径
+}
+```
+
+**验证**：
+```bash
+# 测试后端直连
+curl http://localhost:9080/api/sessions
+# 应返回会话列表 JSON
+
+# 测试 Nginx 代理
+curl https://your-domain.com/api/sessions
+# 应返回相同结果
+```
+
+#### 3. WebSocket 连接失败（Streamlit 无法加载）
+
+**现象**：前端页面一直加载，或显示连接错误
+
+**原因**：Nginx 缺少 WebSocket 升级配置
+
+**解决方案**：
+
+确保 Nginx 配置包含以下 location：
+
+```nginx
+location /_stcore/stream {
+    proxy_pass http://127.0.0.1:9501/_stcore/stream;
+    proxy_http_version 1.1;
+
+    # 必需：WebSocket 升级头
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    proxy_set_header Host $host;
+    proxy_read_timeout 86400;  # WebSocket 长连接
+}
+```
+
+重载 Nginx：
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 本地开发问题
+
+#### 4. 后端服务无法启动
+
+**问题**: `ConnectionRefusedError` 或端口被占用
 
 **解决方案**:
 ```bash
@@ -287,11 +442,14 @@ intelligent-chatbot/
 netstat -ano | findstr :8080  # Windows
 lsof -i :8080                 # macOS/Linux
 
-# 确保后端已启动
-python app.py
+# 杀死占用进程（Linux/macOS）
+kill -9 $(lsof -t -i:8080)
+
+# 或修改端口（.env 文件）
+PORT=8081
 ```
 
-### 2. API 密钥错误
+#### 5. API 密钥错误
 
 **问题**: `401 Unauthorized` 或 "API 密钥验证失败"
 
@@ -299,26 +457,94 @@ python app.py
 - 检查 API 密钥格式：
   - Claude: `sk-ant-api-...`
   - Tavily: `tvly-...`
+  - OpenAI: `sk-proj-...`
 - 确认密钥未过期且有足够配额
-- 检查 `.env` 文件或侧边栏输入
+- 检查 `.env` 文件是否正确加载
+- Docker 用户：确认 `docker-compose.yml` 中的环境变量映射
 
-### 3. 工具调用失败
+```bash
+# 测试环境变量加载
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print(os.getenv('ANTHROPIC_API_KEY'))"
+```
 
-**问题**: 工具调用超时或返回错误
+### 运行时问题
+
+#### 6. 工具调用失败或超时
+
+**问题**: Tavily 搜索/提取工具返回错误
 
 **解决方案**:
-- 检查网络连接
+- 检查网络连接（特别是防火墙/代理）
 - 确认 Tavily API 配额充足
-- 降低并发请求数量
+- 检查后端日志：`docker logs chatbot-backend -f`
+- 降低并发请求数量或增加超时时间
 
-### 4. 流式响应中断
+#### 7. 流式响应中断
 
-**问题**: 响应中途停止或不完整
+**问题**: AI 回复中途停止或不完整
 
 **解决方案**:
-- 增加请求超时时间
-- 检查后端日志（`app.py` 输出）
-- 确认 LLM 配额充足
+- 检查 LLM API 配额和速率限制
+- 增加 Nginx 超时设置（如使用反向代理）
+- 检查后端日志查看错误堆栈
+- 尝试切换模型（如从 Opus 降级到 Sonnet）
+
+### 数据问题
+
+#### 8. 会话历史丢失
+
+**问题**：重启容器后对话记录消失
+
+**原因**：未挂载数据目录
+
+**解决方案**：
+
+确保 `docker-compose.yml` 包含数据卷：
+
+```yaml
+backend:
+  volumes:
+    - ./data:/app/data  # 持久化会话数据
+```
+
+恢复数据：
+```bash
+# 备份现有数据
+docker cp chatbot-backend:/app/data ./data-backup
+
+# 或在 docker-compose.yml 中添加 volume 后重启
+docker-compose down
+docker-compose up -d
+```
+
+### 性能问题
+
+#### 9. 响应速度慢
+
+**优化建议**：
+1. 使用更快的模型（Haiku > Sonnet > Opus）
+2. 减少搜索结果数量（快速模式：3 条，深度模式：5 条）
+3. 限制爬取页面数量
+4. 使用 CDN 加速静态资源
+5. 增加服务器资源（CPU/内存）
+
+### 日志查看
+
+```bash
+# Docker 日志
+docker logs chatbot-backend --tail 100 -f
+docker logs chatbot-frontend --tail 100 -f
+
+# Nginx 日志
+sudo tail -f /var/log/nginx/chatbot.access.log
+sudo tail -f /var/log/nginx/chatbot.error.log
+
+# 查看所有容器状态
+docker ps -a
+docker stats chatbot-backend chatbot-frontend
+```
+
+**更多问题？** 请查看 [故障排查完整指南](./docs/TROUBLESHOOTING.md)
 
 ## 🔮 未来计划
 

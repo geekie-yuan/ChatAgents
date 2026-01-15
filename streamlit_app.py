@@ -50,7 +50,7 @@ st.set_page_config(
 )
 
 # ==================== 配置常量 ====================
-BACKEND_URL = "http://localhost:8080"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8080")
 MIN_TIME_BETWEEN_REQUESTS = datetime.timedelta(seconds=1)
 HISTORY_LENGTH = 10  # 保留最近10条消息用于上下文
 
