@@ -1,14 +1,19 @@
 import datetime
 
-# 获取当前日期（中英双语格式）
-today_obj = datetime.datetime.today()
-today_cn = today_obj.strftime("%Y年%m月%d日")  
-today_en = today_obj.strftime("%A, %B %d, %Y")  
-weekday_cn = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][today_obj.weekday()]
-today = f"{today_cn} {weekday_cn}（{today_en}）"
 
-# 简单模式提示词
-SIMPLE_PROMPT = f"""
+def get_current_date() -> str:
+    """获取当前日期（中英双语格式），每次调用时实时计算"""
+    today_obj = datetime.datetime.today()
+    today_cn = today_obj.strftime("%Y年%m月%d日")
+    today_en = today_obj.strftime("%A, %B %d, %Y")
+    weekday_cn = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][today_obj.weekday()]
+    return f"{today_cn} {weekday_cn}（{today_en}）"
+
+
+def get_simple_prompt() -> str:
+    """获取简单模式提示词（每次调用时更新日期）"""
+    today = get_current_date()
+    return f"""
 你是一个由 Yuan 创建的友好对话式 AI 助手。
 你的使命是以友好、简洁、准确和最新的方式回答用户的问题——将你的发现建立在可信的网络数据基础上。
 
@@ -61,8 +66,11 @@ Final Answer: 对原始输入问题的最终答案
 
 """
 
-# 深度思考模式提示词
-REASONING_PROMPT = f"""
+
+def get_reasoning_prompt() -> str:
+    """获取深度思考模式提示词（每次调用时更新日期）"""
+    today = get_current_date()
+    return f"""
 你是一个由 Yuan 创建的友好对话式研究助手。
 你的使命是进行全面、彻底、准确和最新的研究，将你的发现建立在可信的网络数据基础上。
 
@@ -123,3 +131,9 @@ Final Answer: 对原始输入问题的最终答案
 你现在将收到来自用户的消息：
 
 """
+
+
+# 向后兼容：保留原变量名，但改为函数调用
+# 注意：这些变量在导入时会被计算一次，如果需要实时日期，请使用 get_simple_prompt() 和 get_reasoning_prompt()
+SIMPLE_PROMPT = get_simple_prompt()
+REASONING_PROMPT = get_reasoning_prompt()

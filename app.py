@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).parent))
 
 # 导入后端模块
 from backend.agent import WebAgent
-from backend.prompts import REASONING_PROMPT, SIMPLE_PROMPT
+from backend.prompts import get_reasoning_prompt, get_simple_prompt
 from backend.utils import check_api_key
 from backend.llm_config import LLMConfig, LLMProvider
 from backend.session_manager import get_session_manager
@@ -171,12 +171,12 @@ async def stream_agent(body: AgentRequest, request: Request):
         logger.warning(f"创建摘要 LLM 失败，使用主 LLM: {e}")
         summary_llm = main_llm
 
-    # 选择提示词
+    # 选择提示词（每次请求时动态获取，确保日期实时更新）
     if body.agent_type == "fast":
-        prompt = SIMPLE_PROMPT
+        prompt = get_simple_prompt()
         logger.info(f"使用快速模式，LLM: {body.llm_provider}/{body.llm_model}")
     elif body.agent_type == "deep":
-        prompt = REASONING_PROMPT
+        prompt = get_reasoning_prompt()
         logger.info(f"使用深度思考模式，LLM: {body.llm_provider}/{body.llm_model}")
     else:
         raise HTTPException(status_code=400, detail="无效的智能体类型，请选择 'fast' 或 'deep'")
